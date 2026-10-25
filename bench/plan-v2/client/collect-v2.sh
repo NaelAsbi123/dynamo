@@ -29,3 +29,13 @@ for W in sys.argv[2:]:
           f"out_tok_s={g(r,'output_token_throughput','avg')} dur_s={round(r['benchmark_duration']['avg']/1000,1) if 'benchmark_duration' in r else None}")
 PY
 echo "--- picks"; cat "$OUT/picks.txt"; echo "--- engine"; cat "$OUT/engine.txt"
+[ -f "$OUT/metrics.jsonl" ] && python3 - "$OUT" <<'PY'
+import json,sys,collections; O=sys.argv[1]; s=open(f"{O}/start.txt").read().strip(); e=open(f"{O}/end.txt").read().strip()
+rows=[json.loads(l) for l in open(f"{O}/metrics.jsonl") if l.strip()]; w=[r for r in rows if s<=r["ts"]<=e]; by=collections.defaultdict(list)
+for r in w: by[r["pod"]].append(r)
+th=tq=0; print("--- /metrics 5 s scrape, run window")
+for p,rs in sorted(by.items(), key=lambda kv:-max(x["running"] for x in kv[1])):
+    rs.sort(key=lambda x:x["ts"]); dh=rs[-1]["hits"]-rs[0]["hits"]; dq=rs[-1]["queries"]-rs[0]["queries"]; th+=dh; tq+=dq
+    print(f"{p[-5:]} peak_running={max(x['running'] for x in rs):>3} peak_waiting={max(x['waiting'] for x in rs):>3} peak_kv={max(x.get('kv_usage',0) for x in rs)*100:5.1f}% mean_gpu={sum(x.get('gpu_util',0) for x in rs)/len(rs):5.1f}% hit_rate={dh/dq*100 if dq else 0:5.1f}% preempt={rs[-1]['preemptions']-rs[0]['preemptions']}")
+print(f"pool prefix-cache hit rate {th/tq*100 if tq else 0:.1f}%; busiest-worker share from picks: see picks.txt")
+PY

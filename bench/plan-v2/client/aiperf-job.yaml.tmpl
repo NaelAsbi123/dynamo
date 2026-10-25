@@ -20,6 +20,7 @@ spec:
           args:
             - |
               pip install --quiet aiperf==0.13.0
+              export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1200
               ISL=__ISL__; OSL=__OSL__; PR=__PREFIX_RATIO__
               # stddev fixed at 400 tokens: with --max-model-len 16384 on 24 GB A10G, aiperf default stddev (ISL/4) pushed half the prompts over the limit
               PREFIX=$(python3 -c "print(int($ISL*$PR))"); SYN=$(python3 -c "print(int($ISL*(1-$PR)))"); SYNSD=400
@@ -29,7 +30,7 @@ spec:
                 --url http://__GATEWAY__ \
                 --synthetic-input-tokens-mean "$SYN" --synthetic-input-tokens-stddev "$SYNSD" \
                 --output-tokens-mean "$OSL" --output-tokens-stddev 50 \
-                --concurrency __CONCURRENCY__ --request-count __REQUESTS__ --num-dataset-entries __REQUESTS__ \
+                --concurrency __CONCURRENCY__ __RUNMODE__ --export-level records \
                 --random-seed __SEED__ --prefix-prompt-length "$PREFIX" --num-prefix-prompts __NUM_PREFIX__ \
                 --artifact-dir /artifacts/__ARM__-__WORKLOAD__-s__SEED__ --dataset-sampling-strategy shuffle \
                 --endpoint-type chat --streaming --extra-inputs ignore_eos:true --no-gpu-telemetry \

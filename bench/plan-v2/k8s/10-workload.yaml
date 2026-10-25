@@ -41,7 +41,9 @@ spec:
             - --max-num-seqs
             - "12"
             - --gpu-memory-utilization
-            - "0.95"
+            - "0.90"
+            - --enable-chunked-prefill
+            - --enforce-eager
             - --kv-events-config
             - '{"publisher":"zmq","endpoint":"tcp://*:5557","enable_kv_cache_events":true}'
           env:
