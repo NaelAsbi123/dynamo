@@ -1,0 +1,206 @@
+# Benchmark workload: 8 stock vLLM workers (1 A10G each) + one standalone Dynamo EPP (our build) + InferencePool + HTTPRoute.
+# Adapted from deploy/inference-gateway/ext-proc/examples/onramp/agg.yaml at Dynamo 3763cee. Namespace: bench.
+# Images are substituted before apply: runai.jfrog.io/op-containers-lab/dynamo-epp-adaptive:16f986c, vllm/vllm-openai:v0.32.0.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bench
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-worker
+  namespace: bench
+  labels: { app: vllm-worker }
+spec:
+  replicas: 8
+  selector:
+    matchLabels: { app: vllm-worker }
+  template:
+    metadata:
+      labels: { app: vllm-worker }
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.32.0
+          # vllm/vllm-openai >= v0.31 has ENTRYPOINT `vllm serve`: the model is the first positional argument.
+          args:
+            - Qwen/Qwen3-1.7B
+            - --served-model-name
+            - Qwen/Qwen3-1.7B
+            - --port
+            - "8000"
+            - --enable-prefix-caching
+            - --enable-scale-out
+            - --block-size
+            - "16"
+            - --max-model-len
+            - "16384"
+            - --max-num-batched-tokens
+            - "32768"
+            - --max-num-seqs
+            - "12"
+            - --gpu-memory-utilization
+            - "0.95"
+            - --kv-events-config
+            - '{"publisher":"zmq","endpoint":"tcp://*:5557","enable_kv_cache_events":true}'
+          env:
+            - { name: HF_HOME, value: /hf }
+          ports:
+            - { name: http, containerPort: 8000 }
+            - { name: kv-events, containerPort: 5557 }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { nvidia.com/gpu: "1", cpu: "4", memory: "16Gi" }
+            limits: { nvidia.com/gpu: "1" }
+          volumeMounts:
+            - { name: hf, mountPath: /hf }
+            - { name: shm, mountPath: /dev/shm }
+      volumes:
+        - { name: hf, emptyDir: {} }
+        - { name: shm, emptyDir: { medium: Memory, sizeLimit: 8Gi } }
+      tolerations:
+        - { effect: NoSchedule, key: nvidia.com/gpu, operator: Exists }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-worker-render
+  namespace: bench
+spec:
+  selector: { app: vllm-worker }
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dynamo-epp
+  namespace: bench
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dynamo-epp
+  namespace: bench
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get]
+  - apiGroups: [inference.networking.k8s.io]
+    resources: [inferencepools]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dynamo-epp
+  namespace: bench
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: dynamo-epp }
+subjects:
+  - { kind: ServiceAccount, name: dynamo-epp, namespace: bench }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamo-epp
+  namespace: bench
+spec:
+  selector: { app: dynamo-epp }
+  ports:
+    - { name: grpc, appProtocol: http2, port: 9002, targetPort: grpc }
+---
+# One EPP replica: the adaptive loop keeps per-process state, and a single selector gives one consistent load view.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamo-epp
+  namespace: bench
+  labels: { app: dynamo-epp }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dynamo-epp }
+  template:
+    metadata:
+      labels: { app: dynamo-epp }
+    spec:
+      serviceAccountName: dynamo-epp
+      containers:
+        - name: epp
+          image: runai.jfrog.io/op-containers-lab/dynamo-epp-adaptive:16f986c
+          imagePullPolicy: Always
+          command: ["/bin/bash","-c","ulimit -n 524288 && exec /epp"]
+          env:
+            - { name: DYN_EPP_MODE, value: standalone }
+            - { name: DYN_EPP_INFERENCE_POOL_NAME, value: vllm-worker-pool }
+            - { name: DYN_MODEL_NAME, value: Qwen/Qwen3-1.7B }
+            - { name: DYN_EPP_TOKENIZER_SERVICE_URL, value: http://vllm-worker-render:8000 }
+            - { name: DYN_EPP_TOKENIZER_PROTOCOL, value: vllm-render }
+            - { name: DYN_KV_CACHE_BLOCK_SIZE, value: "16" }
+            - { name: DYN_EPP_KV_EVENT_PORT, value: "5557" }
+            - { name: DYN_EPP_MAX_NUM_BATCHED_TOKENS, value: "32768" }
+            - { name: DYN_EPP_MAX_CONNECTIONS, value: "16384" }
+            # Policy selection: the ConfigMap `epp-policy` holds the active arm's worker-selection YAML.
+            - { name: DYN_ROUTER_POLICY_CONFIG, value: /etc/dynamo/worker-selection.yaml }
+            - { name: RUST_LOG, value: "info,dynamo_custom_policy_example_adaptive_imbalance=debug" }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+          ports:
+            - { name: grpc, containerPort: 9002 }
+            - { name: grpc-health, containerPort: 9003 }
+            - { name: metrics, containerPort: 9090 }
+          readinessProbe:
+            grpc: { port: 9003, service: inference-extension }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - { name: policy, mountPath: /etc/dynamo, readOnly: true }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }
+      volumes:
+        - name: policy
+          configMap: { name: epp-policy }
+---
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: vllm-worker-pool
+  namespace: bench
+spec:
+  selector:
+    matchLabels: { app: vllm-worker }
+  targetPorts:
+    - { number: 8000 }
+  endpointPickerRef:
+    name: dynamo-epp
+    port: { number: 9002 }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vllm-worker-route
+  namespace: bench
+spec:
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: inference-gateway, namespace: agentgateway-system }
+  rules:
+    - backendRefs:
+        - { group: inference.networking.k8s.io, kind: InferencePool, name: vllm-worker-pool, weight: 1 }
+      matches:
+        - path: { type: PathPrefix, value: / }

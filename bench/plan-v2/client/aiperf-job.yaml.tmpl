@@ -1,0 +1,41 @@
+# aiperf run for one workload against the Gateway. Rendered by run-workload.sh (ARM, WORKLOAD, PREFIX_RATIO, CONCURRENCY, REQUESTS, SEED).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aiperf-__ARM__-__WORKLOAD__-s__SEED__
+  namespace: bench
+  labels: { app: aiperf, arm: "__ARM__", workload: "__WORKLOAD__" }
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app: aiperf, arm: "__ARM__", workload: "__WORKLOAD__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: aiperf
+          image: python:3.12-slim
+          command: ["/bin/bash", "-ceu"]
+          args:
+            - |
+              pip install --quiet aiperf==0.13.0
+              ISL=__ISL__; OSL=__OSL__; PR=__PREFIX_RATIO__
+              # stddev fixed at 400 tokens: with --max-model-len 16384 on 24 GB A10G, aiperf default stddev (ISL/4) pushed half the prompts over the limit
+              PREFIX=$(python3 -c "print(int($ISL*$PR))"); SYN=$(python3 -c "print(int($ISL*(1-$PR)))"); SYNSD=400
+              mkdir -p /artifacts && cd /artifacts
+              aiperf profile \
+                --model __MODEL__ --tokenizer __MODEL__ \
+                --url http://__GATEWAY__ \
+                --synthetic-input-tokens-mean "$SYN" --synthetic-input-tokens-stddev "$SYNSD" \
+                --output-tokens-mean "$OSL" --output-tokens-stddev 50 \
+                --concurrency __CONCURRENCY__ --request-count __REQUESTS__ --num-dataset-entries __REQUESTS__ \
+                --random-seed __SEED__ --prefix-prompt-length "$PREFIX" --num-prefix-prompts __NUM_PREFIX__ \
+                --artifact-dir /artifacts/__ARM__-__WORKLOAD__-s__SEED__ --dataset-sampling-strategy shuffle \
+                --endpoint-type chat --streaming --extra-inputs ignore_eos:true --no-gpu-telemetry \
+                -H "Authorization: Bearer NOT USED" -H "Accept: text/event-stream"
+              echo AIPERF_DONE
+              find /artifacts -name 'profile_export_aiperf.json' -exec sh -c 'echo "== $1"; python3 -c "import json,sys; d=json.load(open(sys.argv[1])); r=d.get(\"records\",d); print({k:(v.get(\"p50\"),v.get(\"p99\")) if isinstance(v,dict) else v for k,v in r.items() if k in (\"time_to_first_token\",\"inter_token_latency\",\"request_throughput\",\"output_token_throughput\",\"request_latency\")})" "$1"' _ {} \;
+              sleep 3600
+          resources:
+            requests: { cpu: "2", memory: "4Gi" }
