@@ -20,7 +20,7 @@ spec:
           args:
             - |
               pip install --quiet aiperf==0.13.0
-              export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1200
+              export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1200 AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1500
               ISL=__ISL__; OSL=__OSL__; PR=__PREFIX_RATIO__
               # stddev fixed at 400 tokens: with --max-model-len 16384 on 24 GB A10G, aiperf default stddev (ISL/4) pushed half the prompts over the limit
               PREFIX=$(python3 -c "print(int($ISL*$PR))"); SYN=$(python3 -c "print(int($ISL*(1-$PR)))"); SYNSD=400
