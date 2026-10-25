@@ -30,7 +30,7 @@ spec:
                 --url http://__GATEWAY__ \
                 --synthetic-input-tokens-mean "$SYN" --synthetic-input-tokens-stddev "$SYNSD" \
                 --output-tokens-mean "$OSL" --output-tokens-stddev 50 \
-                --concurrency __CONCURRENCY__ __RUNMODE__ --export-level records \
+                __RUNMODE__ --export-level records \
                 --random-seed __SEED__ --prefix-prompt-length "$PREFIX" --num-prefix-prompts __NUM_PREFIX__ \
                 --artifact-dir /artifacts/__ARM__-__WORKLOAD__-s__SEED__ --dataset-sampling-strategy shuffle \
                 --endpoint-type chat --streaming --extra-inputs ignore_eos:true --no-gpu-telemetry \
