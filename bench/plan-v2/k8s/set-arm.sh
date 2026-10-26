@@ -9,16 +9,16 @@ set -euo pipefail
 ARM="${1:?usage: set-arm.sh a|c|w}"   # a Stock (upstream defaults, decode weight 0), c Adaptive, w Weight-4000
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$ARM" in
-  a) kubectl -n bench set env deployment/dynamo-epp DYN_ROUTER_POLICY_CONFIG- DYN_ROUTER_WORKER_SELECTION_POLICY=default \
+  a) kubectl --request-timeout=30s -n bench set env deployment/dynamo-epp DYN_ROUTER_POLICY_CONFIG- DYN_ROUTER_WORKER_SELECTION_POLICY=default \
        DYN_ROUTER_KV_OVERLAP_SCORE_CREDIT=1.0 DYN_ROUTER_PREFILL_LOAD_SCALE=1.0 DYN_ROUTER_DECODE_ACTIVE_REQUEST_WEIGHT=0.0 DYN_ROUTER_TEMPERATURE=0.0 ;;
-  w) kubectl -n bench set env deployment/dynamo-epp DYN_ROUTER_POLICY_CONFIG- DYN_ROUTER_WORKER_SELECTION_POLICY=default \
+  w) kubectl --request-timeout=30s -n bench set env deployment/dynamo-epp DYN_ROUTER_POLICY_CONFIG- DYN_ROUTER_WORKER_SELECTION_POLICY=default \
        DYN_ROUTER_KV_OVERLAP_SCORE_CREDIT=1.0 DYN_ROUTER_PREFILL_LOAD_SCALE=1.0 DYN_ROUTER_DECODE_ACTIVE_REQUEST_WEIGHT=4000 DYN_ROUTER_TEMPERATURE=0.0 ;;
-  c) kubectl -n bench create configmap epp-policy --from-file=worker-selection.yaml="$HERE/arms/arm-c-adaptive.yaml" --dry-run=client -o yaml | kubectl apply -f -
-     kubectl -n bench set env deployment/dynamo-epp DYN_ROUTER_POLICY_CONFIG=/etc/dynamo/worker-selection.yaml DYN_ROUTER_WORKER_SELECTION_POLICY=arm-c \
+  c) kubectl --request-timeout=30s -n bench create configmap epp-policy --from-file=worker-selection.yaml="$HERE/arms/arm-c-adaptive.yaml" --dry-run=client -o yaml | kubectl apply -f -
+     kubectl --request-timeout=30s -n bench set env deployment/dynamo-epp DYN_ROUTER_POLICY_CONFIG=/etc/dynamo/worker-selection.yaml DYN_ROUTER_WORKER_SELECTION_POLICY=arm-c \
        DYN_ROUTER_KV_OVERLAP_SCORE_CREDIT- DYN_ROUTER_PREFILL_LOAD_SCALE- DYN_ROUTER_DECODE_ACTIVE_REQUEST_WEIGHT- DYN_ROUTER_TEMPERATURE- ;;
   *) echo "unknown arm $ARM"; exit 1 ;;
 esac
-kubectl -n bench rollout restart deployment/dynamo-epp
-kubectl -n bench rollout status deployment/dynamo-epp --timeout=240s
+kubectl --request-timeout=30s -n bench rollout restart deployment/dynamo-epp
+kubectl --request-timeout=30s -n bench rollout status deployment/dynamo-epp --timeout=240s
 sleep 3
-kubectl -n bench logs deployment/dynamo-epp --tail=40 | grep -i -E "polic|worker|standalone|error|adaptive" | cut -c1-200 | head -12
+kubectl --request-timeout=30s -n bench logs deployment/dynamo-epp --tail=40 | grep -i -E "polic|worker|standalone|error|adaptive" | cut -c1-200 | head -12
