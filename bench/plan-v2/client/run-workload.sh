@@ -23,8 +23,8 @@ case "$W" in
   HOTR4) PR=0.8333; RATE=${RATE:-2.0}; NP=4; ISL=7200; OSL=1000; WARMUP=0 ;;  # open loop: G=4 at RATE req/s
   HOT4) PR=0.8333; CONC=${CONC:-64}; NP=4; ISL=7200; OSL=1000 ;;     # sweep hot-prefix G=4
   EVEN) PR=0.8333; CONC=${CONC:-32}; NP=150; ISL=7200; OSL=1000 ;;   # sweep hot-prefix G=150 = even load
-  WARM1) PR=0.8333; CONC=1; NP=1; ISL=7200; OSL=16; REQUESTS=1; WARMUP=0 ;;    # one holder for the single hot prefix
-  WARM4) PR=0.8333; CONC=1; NP=4; ISL=7200; OSL=16; REQUESTS=4; WARMUP=0 ;;    # one holder per hot prefix
+  WARM1) PR=0.8333; CONC=1; NP=1; ISL=7200; OSL=16; REQUESTS=1; WARMUP=0; RATE="" ;;   # always one request, even when RATE is set for the main run    # one holder for the single hot prefix
+  WARM4) PR=0.8333; CONC=1; NP=4; ISL=7200; OSL=16; REQUESTS=4; WARMUP=0; RATE="" ;;    # one holder per hot prefix
   BURST) PR=0.8333; CONC=200; NP=1; ISL=7200; OSL=1000; DURATION=${DURATION:-180}; GRACE=${GRACE:-600}; WARMUP=0 ;;  # sweep burst: 200 concurrent on one prefix for 180 s, no warm-up, on top of EVEN
   *) echo "unknown workload $W"; exit 1 ;;
 esac
