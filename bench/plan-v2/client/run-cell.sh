@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # usage: WL=HOT1 CONC=64 run-cell.sh (closed loop) or WL=HOTR RATE=1.0 run-cell.sh (open loop) <arm a|w|c> <seed> <out dir>   One grid cell: restart workers (clear prefix caches), set the arm, scrape, warm one holder per prefix, run WL at CONC for 600 s + drain (64 aiperf warm-up requests), collect.
-set -euo pipefail
+set -uo pipefail   # no -e: every failure is handled explicitly; a failing kubectl in a $(...) must not abort the cell
 ARM="$1"; SEED="$2"; OUT="$3"; HERE="$(cd "$(dirname "$0")" && pwd)"; mkdir -p "$OUT"
 echo "$(date +%T) [$ARM] restarting workers to clear prefix caches"
 kubectl --request-timeout=30s -n bench delete jobs -l app=aiperf --ignore-not-found >/dev/null
 kubectl --request-timeout=30s -n bench rollout restart deployment/vllm-worker >/dev/null
 kubectl --request-timeout=30s -n bench rollout status deployment/vllm-worker --timeout=900s >/dev/null
 echo "$(date +%T) [$ARM] setting arm"; SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ); bash "$HERE/../k8s/set-arm.sh" "$ARM" >/dev/null
-for i in $(seq 1 60); do n=$(kubectl --request-timeout=30s -n bench logs deployment/dynamo-epp --since-time="$SINCE" 2>/dev/null | grep -c 'ZMQ listener starting'); [ "$n" -ge 8 ] && break; sleep 5; done
+for i in $(seq 1 60); do n=$(kubectl --request-timeout=30s -n bench logs deployment/dynamo-epp --since-time="$SINCE" 2>/dev/null | grep -c 'ZMQ listener starting' || true); [ "${n:-0}" -ge 8 ] && break; sleep 5; done
 echo "$(date +%T) [$ARM] EPP sees $n KV listeners"
 bash "$HERE/scrape-metrics.sh" "$OUT/metrics.jsonl" >/dev/null 2>&1 & SCR=$!
 trap 'kill $SCR 2>/dev/null; pkill -P $SCR 2>/dev/null' EXIT   # never leave the scraper holding the driver pipe open

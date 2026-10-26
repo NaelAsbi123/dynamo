@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: run-burst.sh <arm a|w|c> <seed> <out dir>   Burst cell: restart workers, set the arm, scrape, start EVEN at 32 for 1200 s,
 # 600 s in start BURST (200 concurrent on one 6000-token prefix, 180 s), wait for both, collect both streams and the pre/burst/post windows.
-set -euo pipefail
+set -uo pipefail   # no -e: every failure is handled explicitly; a failing kubectl in a $(...) must not abort the cell
 ARM="$1"; SEED="$2"; OUT="$3"; HERE="$(cd "$(dirname "$0")" && pwd)"; mkdir -p "$OUT"
 kubectl --request-timeout=30s -n bench delete jobs -l app=aiperf --ignore-not-found >/dev/null
 kubectl --request-timeout=30s -n bench rollout restart deployment/vllm-worker >/dev/null; kubectl --request-timeout=30s -n bench rollout status deployment/vllm-worker --timeout=900s >/dev/null

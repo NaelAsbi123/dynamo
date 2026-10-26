@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Live progress of the unattended Plan v2 run: cells done / 31, current step and cell. Refreshes every 20 s.
-T="$1"; TOTAL=31; RES="${2:-}"   # RES = results root; cells are counted from result directories that hold a summary
+T="$1"; RES="${2:-}"; TOTAL="${3:-31}"   # RES = results root; cells are counted from result directories that hold a summary
 while true; do
   done_cells=0; [ -n "$RES" ] && done_cells=$(ls -d "$RES"/*/ 2>/dev/null | while read d; do [ -f "$d/end.txt" ] && ls "$d"/*/profile_export_aiperf.json >/dev/null 2>&1 && echo x; done | wc -l | tr -d ' ')
   step=$(grep -oE '##### (STEP|PHASE) [0-9a-z]+[^(]*' "$T" 2>/dev/null | tail -1 | sed 's/##### //' | cut -c1-60)
@@ -11,7 +11,7 @@ while true; do
   pct=$(( done_cells * 100 / TOTAL )); filled=$(( done_cells * 30 / TOTAL ))
   bar=$(printf '%*s' "$filled" '' | tr ' ' '#')$(printf '%*s' $((30 - filled)) '' | tr ' ' '.')
   clear
-  echo "Benchmark Plan v2  (A10G, nasbi-run-51708-a10)        $(date +%H:%M:%S)"
+  echo "Benchmark Plan v2  ${4:-env 1 nasbi-run-51708-a10}        $(date +%H:%M:%S)"
   echo
   echo "  [$bar] $done_cells/$TOTAL cells  ($pct%)"
   echo
