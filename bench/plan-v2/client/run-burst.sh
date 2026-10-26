@@ -6,7 +6,8 @@ ARM="$1"; SEED="$2"; OUT="$3"; HERE="$(cd "$(dirname "$0")" && pwd)"; mkdir -p "
 kubectl --request-timeout=30s -n bench delete jobs -l app=aiperf --ignore-not-found >/dev/null
 kubectl --request-timeout=30s -n bench rollout restart deployment/vllm-worker >/dev/null; kubectl --request-timeout=30s -n bench rollout status deployment/vllm-worker --timeout=900s >/dev/null
 bash "$HERE/../k8s/set-arm.sh" "$ARM" >/dev/null
-bash "$HERE/scrape-metrics.sh" "$OUT/metrics.jsonl" & SCR=$!
+bash "$HERE/scrape-metrics.sh" "$OUT/metrics.jsonl" >/dev/null 2>&1 & SCR=$!
+trap 'kill $SCR 2>/dev/null; pkill -P $SCR 2>/dev/null' EXIT
 date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/start.txt"
 CONC=32 DURATION=1200 GRACE=900 bash "$HERE/run-workload.sh" "$ARM" EVEN "$SEED" >/dev/null; echo "$(date +%T) [$ARM] EVEN at 32 started"
 sleep 600

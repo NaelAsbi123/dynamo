@@ -22,6 +22,6 @@ for a in a w c; do cell HOTR 1.0 $a 31 g1-r1; done; for a in a w c; do cell HOTR
 echo "$(date +%T) ##### PHASE 2b budget 8192: G=1 at 1.0 req/s and G=150 at 32, Stock and Adaptive"
 budget 8192; for a in a c; do cell HOTR 1.0 $a 31 g1-r1-b8192; done; for a in a c; do cell EVEN 32 $a 31 g150-c32-b8192; done; budget 32768
 echo "$(date +%T) ##### PHASE 2c G=4 at 2.0 req/s"; for a in a w c; do cell HOTR4 2.0 $a 31 g4-r2; done
-echo "$(date +%T) ##### PHASE 2d burst"; for a in a w c; do burst $a; done
-echo "$(date +%T) ##### PHASE 2e second seed: G=1 at 1.0 req/s and G=150 at 32"; for a in a w c; do cell HOTR 1.0 $a 32 g1-r1; done; for a in a w c; do cell EVEN 32 $a 32 g150-c32; done
+echo "$(date +%T) ##### PHASE 2d burst: moved to the second environment (run-env2.sh)"
+echo "$(date +%T) ##### PHASE 2e second seed: moved to the second environment (run-env2.sh)"
 echo "$(date +%T) ALL_STEPS_DONE"
